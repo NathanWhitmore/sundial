@@ -415,7 +415,7 @@ The 'suntools package' is based on the 'Astronomical Algorithms' by Jean Meeus (
 
 **Acknowledgements**
 
-The code for this dashboard was written by Nathan Whitmore is freely available for reuse and modification via an [MIT license](https://choosealicense.com/licenses/mit/). The source code can be found under the under the '</> Source Code' tab or via [GitHub].  Dashboard creation was funded by the Otago Regional Council. Special thanks go to Scott Jarvie for instigating this project.
+The code for this dashboard was written by Nathan Whitmore is freely available for reuse and modification via an [MIT license](https://choosealicense.com/licenses/mit/). The source code can be found under the under the '</> Source Code' tab or via [GitHub](https://github.com/NathanWhitmore/sundial).  Dashboard creation was funded by the Otago Regional Council. Special thanks go to Scott Jarvie for instigating this project.
 
 
 Column 
