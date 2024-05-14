@@ -1,0 +1,428 @@
+---
+title: "Sundial: a tool for gnomonic timesetting"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    navbar:
+      - { title: "reproducible.co.nz", href: "https://reproducible.co.nz", align: right }
+    orientation: rows
+    vertical_layout: fill
+    theme: spacelab
+    source_code: embed 
+---
+<style>
+
+body {
+  padding-top: 70px;
+}
+
+
+.navbar-brand {
+font-family: "Candara";
+  font-weight: bold;
+  font-size: 24px;
+}
+
+
+</style>
+
+
+```{r}
+# requires older version of flexdashboard for operation with leaflet
+library(remotes)
+# install_version("flexdashboard", version = "0.5.2", repos = "http://cran.us.r-project.org")
+
+# standard libraries
+library(sf)
+library(tidyverse)
+library(leaflet)
+library(lubridate)
+library(shiny)
+library(flexdashboard)
+library(DT)
+library(suntools)
+library(htmlwidgets)
+library(readxl)
+
+```
+
+
+Recorder locations
+=====================================
+
+Column {.sidebar data-width=260}
+-------------------------------------
+
+**Upload data via csv**
+
+```{r}
+fileInput("file1", "Choose CSV file",
+                    multiple = FALSE)
+
+my.file <- eventReactive(input$file1,{
+  
+   my.file <- read_excel(input$file1$datapath, sheet = "Regional Coordinates") 
+   
+   my.file <- my.file %>% drop_na(Longitude)
+   my.file <- my.file %>% drop_na(Latitude)
+
+   my.file <- my.file %>%
+     st_as_sf(coords = c("Longitude", "Latitude"),
+           crs = 4326)
+
+  
+  my.file 
+
+})
+```
+
+<br/>
+
+```{r}
+selectInput("astro", label = "Choose baseline", 
+    choices = c("sunrise / sunset", 
+                "civil dawn / civil dusk",
+                "nautical dawn / nautical dusk"), 
+    selected = "sunset / sunrise")
+```
+
+<br/>
+
+
+```{r}
+selectInput("timezone", label = "Choose time zone", 
+    choices = stringi::stri_timezone_list(), 
+    selected = "Pacific/Auckland")
+```
+
+<br/>
+
+```{r}
+dateRangeInput("dates", label = "Enter date ranges")
+```
+
+<br/>
+
+**Enter offset**
+
+```{r}
+sliderInput("light", label = "Minutes before/after baseline [1]", 
+            min = -90, 
+            max = 90, step = 5, value = 0)
+```
+
+```{r}
+sliderInput("dark", label = "Minutes before/after baseline [2]", 
+            min = -90, 
+            max = 90, step = 5, value = 0)
+```
+
+<br/>
+
+Column
+-------------------------------------
+
+```{r}
+
+output$mymap  <- renderLeaflet({
+
+  
+leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+  
+  # add base maps
+  addProviderTiles("Esri.WorldImagery",
+                   # give the layer a name
+                   group = "World") %>%
+  # set zoom and position
+  setView(lng = 169,
+          lat = -45.9,
+          zoom = 8) %>%
+  addCircleMarkers(
+        data = my.file(),
+        color = "red",
+        fillOpacity = 0.01,
+        radius = 10,
+        popup =paste(my.file()$`Wetland Complex`, "<br/>",
+                     my.file()$District, "<br/>",
+                     my.file()$Region)
+      ) %>%
+         onRender(
+        "function(el, x) {
+          L.control.zoom({position:'topright'}).addTo(this);
+        }")
+  
+})
+
+
+leafletOutput('mymap', height = 850)
+
+
+```
+
+Date-time table
+=====================================
+
+Column {.sidebar data-width=260}
+-------------------------------------
+
+Click the button below to download file to your computer. You are strongly encouraged to rename the file.
+
+<br/>
+
+```{r}
+# Create placeholder for the download button
+uiOutput("downloadtimes")
+```
+
+```{r, echo = FALSE}
+output$downloadtimes <- renderUI( {
+  downloadButton("downBtntimes", "Download times", style = "width:100%;")
+})
+
+output$downBtntimes <- downloadHandler(
+  filename = function() {'Name your by time file.csv'},
+  content = function(file) {
+    write.csv(finalised(), file, row.names = FALSE)
+  }
+)
+```
+
+<br/>
+
+**Current time zone**
+```{r}
+renderUI({
+  
+  input$timezone
+  
+})
+```
+
+<br/>
+
+**Earliest start time:**
+```{r}
+renderUI({
+  
+  min(finalised()[, ncol(finalised()) -1])
+  
+  
+})
+```
+
+<br/>
+
+**Latest finish time: **
+```{r}
+renderUI({
+  
+  max(finalised()[, ncol(finalised())])
+  
+  
+})
+```
+
+Column 
+-------------------------------------
+
+
+```{r}
+# sequence dates
+date <- reactive({
+  
+  req(input$dates)
+  
+  seq(from = input$dates[1], 
+                to = input$dates[2], by = "1 day")
+  
+})
+
+
+# get unique coordinates
+raw <- reactive ({
+  
+  uni.coord <-my.file() %>% 
+    st_coordinates() %>% 
+    as.data.frame() %>%
+    distinct() 
+  
+  loc.dates <- expand_grid(uni.coord , date()) %>% as.data.frame()
+  colnames(loc.dates) <- c("long", "lat", "date")
+
+  
+  loc.dates
+
+  
+})
+
+```
+
+
+
+```{r}
+
+
+my.final <- reactive({
+  
+  final <- raw()
+  
+  tz(final$date) <-  input$timezone
+  
+  if (input$astro == "sunrise / sunset") {
+    final$sunrise <- sunriset(as.matrix(final[, c(1, 2)]),
+                              final$date,
+                              direction = 'sunrise',
+                              POSIXct.out = TRUE)[, 2]
+    
+    final$sunset <- sunriset(as.matrix(final[, c(1, 2)]),
+                             final$date,
+                             direction = 'sunset',
+                             POSIXct.out = TRUE)[, 2]
+    
+    final$start <- final$sunrise + (input$light * 60)
+    final$finish <- final$sunset + (input$dark * 60)
+    final
+    
+  } else if (input$astro == "civil dawn / civil dusk") {
+    final$civil.dawn <- crepuscule(
+      as.matrix(final[, c(1, 2)]),
+      final$date,
+      solarDep = 6,
+      direction = "dawn",
+      POSIXct.out = TRUE
+    )[, 2]
+    
+    final$civil.dusk <- crepuscule(
+      as.matrix(final[, c(1, 2)]),
+      final$date,
+      solarDep = 6,
+      direction = "dusk",
+      POSIXct.out = TRUE
+    )[, 2]
+    
+    final$start <- final$civil.dawn + (input$light * 60)
+    final$finish <- final$civil.dusk + (input$dark * 60)
+    final
+    
+  } else {
+    final$nautical.dawn <- crepuscule(
+      as.matrix(final[, c(1, 2)]),
+      final$date,
+      solarDep = 12,
+      direction = "dawn",
+      POSIXct.out = TRUE
+    )[, 2]
+    
+    
+    final$nautical.dusk <- crepuscule(
+      as.matrix(final[, c(1, 2)]),
+      final$date,
+      solarDep = 12,
+      direction = "dusk",
+      POSIXct.out = TRUE
+    )[, 2]
+    
+    final$start <- final$nautical.dawn + (input$light * 60)
+    final$finish <- final$nautical.dusk + (input$dark* 60)
+    final
+    
+  }
+    
+})
+```
+
+
+```{r}
+# change times into character format
+my.output <- reactive({
+  
+  my.final() %>% 
+    mutate_if(is.POSIXct, as.character)
+  
+})
+```
+
+
+```{r}
+# merge datasets so times connect with orginal names
+
+finalised <- reactive({
+
+  # make original data with useable longlat based id
+  my.original <- my.file() %>% distinct()
+  my.original.coord <- st_coordinates(my.original)
+  colnames(my.original.coord) <- c("long", "lat")
+  
+  my.original <- cbind(my.original, my.original.coord)
+  my.original <-  my.original %>% as.data.frame()
+  my.original$id <- paste(my.original$long, my.original$lat)
+  my.original$geometry <- NULL
+  my.original$long <- NULL
+  my.original$lat <- NULL
+  
+  # make time data with useable longlat based id
+  my.times <- my.output()
+  
+  # join my.output
+  my.times$id <-  paste(my.times$long, my.times$lat)
+ 
+  my.original <- as.data.frame(my.original)
+
+ 
+  final.output <- left_join(my.original, 
+                           my.times,
+                           by = "id")
+  
+  final.output $id <- NULL
+ 
+  final.output 
+
+})
+```
+
+
+```{r}
+renderDataTable({
+
+  datatable(finalised(),
+            options = list(
+              filter = "none",
+              scrollY = "500px",
+              paging = FALSE,
+             info = FALSE,
+              columnDefs = list(list(targets='_all', class="dt-left"))))
+  
+  
+})
+
+```
+
+
+Video help
+=====================================
+
+Column {.sidebar data-width=260}
+-------------------------------------
+
+**References**
+
+The astronomical functions used in this dashboard were implemented using the 'suntools' package: *Roger Bivand and Sebastian Luque (2023). suntools: Calculate Sun Position, Sunrise, Sunset, Solar Noon and Twilight.* [R package version 1.0.0.](https://github.com/adokter/suntools/)
+
+
+The 'suntools package' is based on the 'Astronomical Algorithms' by Jean Meeus (1991).
+
+<br/>
+
+**Acknowledgements**
+
+The code for this dashboard was written by Nathan Whitmore is freely available for reuse and modification via an [MIT license](https://choosealicense.com/licenses/mit/). The source code can be found under the under the '</> Source Code' tab or via [GitHub].  Dashboard creation was funded by the Otago Regional Council. Special thanks go to Scott Jarvie for instigating this project.
+
+
+Column 
+-------------------------------------
+
+### Useage
+
+<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/55f7f95fc1554c42a126c91392ac674e?sid=6d84a0ab-23c4-4b0d-a1dc-3e6a4c14719b" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 75%; height: 75%;"></iframe></div>
+
+
