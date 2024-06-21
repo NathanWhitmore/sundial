@@ -39,6 +39,9 @@ library(leaflet)
 library(lubridate)
 library(shiny)
 library(flexdashboard)
+library(rmarkdown)
+library(markdown)
+library(knitr)
 library(DT)
 library(suntools)
 library(htmlwidgets)
@@ -50,10 +53,12 @@ library(readxl)
 Recorder locations
 =====================================
 
-Column {.sidebar data-width=260}
+Column {.sidebar data-width=300}
 -------------------------------------
 
-**Upload data via csv**
+**Upload data**
+
+*Note: the required format is in longlat format with the columns labelled "Longitude" and "Latitude" (with first letter of each word capitalised)*
 
 ```{r}
 fileInput("file1", "Choose CSV file",
@@ -61,7 +66,7 @@ fileInput("file1", "Choose CSV file",
 
 my.file <- eventReactive(input$file1,{
   
-   my.file <- read_excel(input$file1$datapath, sheet = "Regional Coordinates") 
+   my.file <- read.csv(input$file1$datapath) 
    
    my.file <- my.file %>% drop_na(Longitude)
    my.file <- my.file %>% drop_na(Latitude)
@@ -103,6 +108,21 @@ dateRangeInput("dates", label = "Enter date ranges")
 
 <br/>
 
+```{r}
+renderUI({
+  
+  my_vector <- colnames(my.file())
+  my_vector <- my_vector[my_vector != "geometry"]
+
+  selectInput("loc.name", label = "Choose location name (for mapping)", 
+    choices = my_vector)
+
+  
+})
+```
+
+<br/>
+
 **Enter offset**
 
 ```{r}
@@ -125,7 +145,10 @@ Column
 ```{r}
 
 output$mymap  <- renderLeaflet({
-
+  
+  req(input$file1)
+  req(input$file1$datapath)
+  req(input$loc.name)
   
 leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
   
@@ -142,9 +165,7 @@ leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
         color = "red",
         fillOpacity = 0.01,
         radius = 10,
-        popup =paste(my.file()$`Wetland Complex`, "<br/>",
-                     my.file()$District, "<br/>",
-                     my.file()$Region)
+        popup =paste(my.file()[[input$loc.name]])
       ) %>%
          onRender(
         "function(el, x) {
@@ -162,7 +183,7 @@ leafletOutput('mymap', height = 850)
 Date-time table
 =====================================
 
-Column {.sidebar data-width=260}
+Column {.sidebar data-width=300}
 -------------------------------------
 
 Click the button below to download file to your computer. You are strongly encouraged to rename the file.
@@ -401,7 +422,7 @@ renderDataTable({
 Video help
 =====================================
 
-Column {.sidebar data-width=260}
+Column {.sidebar data-width=300}
 -------------------------------------
 
 **References**
