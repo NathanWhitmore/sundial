@@ -175,7 +175,7 @@ leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
 })
 
 
-leafletOutput('mymap', height = 850)
+leafletOutput('mymap', height = 900)
 
 
 ```
