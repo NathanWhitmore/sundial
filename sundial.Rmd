@@ -1,14 +1,18 @@
 ---
-title: "Sundial: a tool for gnomonic timesetting"
+title: 'Sundial: a tool for gnomonic timesetting'
 runtime: shiny
 output:
   flexdashboard::flex_dashboard:
     navbar:
-      - { title: "reproducible.co.nz", href: "https://reproducible.co.nz", align: right }
+    - title: reproducible.co.nz
+      href: https://reproducible.co.nz
+      align: right
     orientation: rows
     vertical_layout: fill
     theme: spacelab
-    source_code: embed 
+    source_code: embed
+resource_files:
+- ORC logo.png
 ---
 <style>
 
@@ -55,6 +59,11 @@ Recorder locations
 
 Column {.sidebar data-width=300}
 -------------------------------------
+
+![](ORC logo.png){width=40%}
+
+<br/>
+
 
 **Upload data**
 
